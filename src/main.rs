@@ -2,7 +2,10 @@ use axum::{
     routing::{delete, get, patch, post},
     Json, Router,
 };
+use clokwerk::{AsyncScheduler, TimeUnits};
 use tokio::signal;
+
+use std::time::Duration;
 
 use state::Storage;
 
@@ -34,6 +37,17 @@ async fn main() {
     println!("Checking for existing database...");
     DB.get().read_from_file("database.json").await;
 
+    let mut scheduler = AsyncScheduler::new();
+    scheduler
+        .every(10.seconds())
+        .run(|| DB.get().write_to_file("snapshot.json"));
+
+    tokio::spawn(async move {
+        loop {
+            scheduler.run_pending().await;
+            tokio::time::sleep(Duration::from_millis(10000)).await;
+        }
+    });
 
     println!("Server started");
     axum::Server::bind(&"0.0.0.0:3000".parse().unwrap())
